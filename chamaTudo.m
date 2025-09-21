@@ -1,0 +1,275 @@
+function saida = chamaTudo(paraSys, folderExample,opt)
+    addpath('../HInf - Análise - Intervalar/funcoes');
+    addpath('../Hinf - Análise/funcoes');
+    
+    tempoRefencia = datetime('now');
+    %% ------------------Carrega os parâmetros das vars--------------------
+    % Sistema
+    A = paraSys.sys.A;
+    B = paraSys.sys.B;
+    E = paraSys.sys.E;
+    C = paraSys.sys.C;
+    D = paraSys.sys.D;
+    sysPolyCont = paraSys.sys.sysPolyCont;
+    
+    
+    %     Tamanho das matrizes
+    nx = length(A.inf);
+    nu = size(B.inf,2);
+        
+    ACal = paraSys.sys.ACal;
+    ECal = paraSys.sys.ECal;
+    CCal = paraSys.sys.CCal;
+    h = paraSys.sys.h;
+    delta = paraSys.sys.delta;
+    
+    % Aux
+    tol = paraSys.aux.tol;
+    
+    
+    % Simulation
+    numPointsUniSpaced = paraSys.simSys.numPointsUniSpaced;
+    numPointsBy2Points = paraSys.simSys.numPointsBy2Points;
+    numbPointsUniSpacedSub = paraSys.simSys.numbPointsUniSpacedSub;
+    onlyVertice =  paraSys.simSys.onlyVertice;
+    
+    %%    ------------------ Generate polytopic system based on the interval sampled continuous system---
+%     D1 = zeros(size(C,1),size(E,2));
+%     D1 = infsup(D1,D1);
+%     APolyCont = genVerticesPolyFromUncerMat(A,tol);
+%     BPolyCont =  genVerticesPolyFromUncerMat(B,tol);
+%     EPolyCont =  genVerticesPolyFromUncerMat(E,tol);
+%     CPolyCont =  genVerticesPolyFromUncerMat(C,tol);
+%     DPolyCont =  genVerticesPolyFromUncerMat(D,tol);
+%     D1PolyCont =  genVerticesPolyFromUncerMat(D1,tol);
+%     
+%     
+% 
+% 
+%      for i=1:length(APolyCont)
+%         for j=1:length(BPolyCont)
+%             for k=1:length(EPolyCont)
+%                 for l=1:length(CPolyCont)
+%                     for m=1:length(DPolyCont)
+%                         for n=1:length(D1PolyCont)
+%                          indNvec = n;             
+%                          indMvec = (m-1)*length(D1PolyCont);
+%                          indLvec = (l-1)*length(DPolyCont)*length(D1PolyCont);
+%                          indKvec = (k-1)*length(CPolyCont)*length(DPolyCont)*length(D1PolyCont);
+%                          indJvec = (j-1)*length(EPolyCont)*length(CPolyCont)*length(DPolyCont)*length(D1PolyCont);
+%                          indIvec = (i-1)*length(BPolyCont)*length(EPolyCont)*length(CPolyCont)*length(DPolyCont)*length(D1PolyCont);
+% 
+%                     
+%                          sysPolyCont{indNvec+indMvec+indLvec+indKvec+indJvec+indIvec}.A = APolyCont{i};
+%                          sysPolyCont{indNvec+indMvec+indLvec+indKvec+indJvec+indIvec}.B2 = BPolyCont{j};
+%                          sysPolyCont{indNvec+indMvec+indLvec+indKvec+indJvec+indIvec}.B1 = EPolyCont{k};
+%                          sysPolyCont{indNvec+indMvec+indLvec+indKvec+indJvec+indIvec}.C = CPolyCont{l};
+%                          sysPolyCont{indNvec+indMvec+indLvec+indKvec+indJvec+indIvec}.D2 = DPolyCont{m};
+%                          sysPolyCont{indNvec+indMvec+indLvec+indKvec+indJvec+indIvec}.D1 = D1PolyCont{n};
+%                         end
+%                     end
+%                 end
+%             end
+%         end
+%      end
+
+    
+    
+    param.onlyVertice = onlyVertice;
+    combSysPolyCont = genCombPoly(sysPolyCont, numPointsUniSpaced, numPointsBy2Points, numbPointsUniSpacedSub,param);
+
+    combAPolyCont.polytopicMatrices = cellfun(@(X) X.A,combSysPolyCont.polytopicMatrices,'UniformOutput',false);
+    combAPolyCont.alphaVecs = combSysPolyCont.alphaVecs;
+
+    combBPolyCont.polytopicMatrices = cellfun(@(X) X.B2,combSysPolyCont.polytopicMatrices,'UniformOutput',false);
+    combBPolyCont.alphaVecs = combSysPolyCont.alphaVecs;
+
+    combEPolyCont.polytopicMatrices = cellfun(@(X) X.B1,combSysPolyCont.polytopicMatrices,'UniformOutput',false);
+    combEPolyCont.alphaVecs = combSysPolyCont.alphaVecs;
+
+    combCPolyCont.polytopicMatrices = cellfun(@(X) X.C,combSysPolyCont.polytopicMatrices,'UniformOutput',false);
+    combCPolyCont.alphaVecs = combSysPolyCont.alphaVecs;
+
+    combDPolyCont.polytopicMatrices = cellfun(@(X) X.D2,combSysPolyCont.polytopicMatrices,'UniformOutput',false);
+    combDPolyCont.alphaVecs = combSysPolyCont.alphaVecs;
+
+    combD1PolyCont.polytopicMatrices = cellfun(@(X) X.D1,combSysPolyCont.polytopicMatrices,'UniformOutput',false);
+    combD1PolyCont.alphaVecs = combSysPolyCont.alphaVecs;
+
+     save([folderExample '/saida']);
+    combPolyCont.A = combAPolyCont;
+    combPolyCont.B = combBPolyCont;
+    combPolyCont.E = combEPolyCont;
+    combPolyCont.C = combCPolyCont;
+    combPolyCont.D = combDPolyCont;
+    combPolyCont.D1 = combD1PolyCont;
+
+     % Save parameters to outPut    
+    saida.combCont = combPolyCont;
+    
+    tempoAgora = datetime('now');
+    disp('Gerar sistema politopico continuo, tempo de execucao');tempoAgora-tempoRefencia
+    tempoRefencia = tempoAgora;
+    
+   
+    
+     %% ------------------Chama Avaliação Estabilidade com HInf garantida---
+    saidaEstHInfSintaseLMILab = estHInfSintLMILab(A,B,E,C,D,h,delta,tol);
+    KCal = [eye(nx) zeros(nx,nu); saidaEstHInfSintaseLMILab.K zeros(nu)];
+    raioEspectralInfLMILab = verificaEstSisHib(ACal.inf, KCal, h);
+    raioEspectralSupLMILab = verificaEstSisHib(ACal.sup, KCal, h);
+    saidaNormMatInfLMILab = normaSistemaContinuo(A.inf+B.inf*saidaEstHInfSintaseLMILab.K,E.inf,C.inf+D.inf*saidaEstHInfSintaseLMILab.K,zeros(size(C.inf,1),size(E.inf,2)));
+    saidaNormMatSupLMILab = normaSistemaContinuo(A.sup+B.sup*saidaEstHInfSintaseLMILab.K,E.sup,C.sup+D.sup*saidaEstHInfSintaseLMILab.K,zeros(size(C.sup,1),size(E.sup,2)));
+    saidaEstHInfLMILab = valEstHInfLMILabInt(ACal,ECal,CCal,KCal,h,delta,tol);
+    saidaEstHInf = valEstHInfInt(ACal,ECal,CCal,KCal,h,delta,tol);
+    save([folderExample '/saida']);
+
+    LMILab.saidaEstHInfSintaseLMILab = saidaEstHInfSintaseLMILab;
+    LMILab.raioEspectralInf = raioEspectralInfLMILab;
+    LMILab.raioEspectralSup = raioEspectralSupLMILab;
+    LMILab.saidaNormMatInf = saidaNormMatInfLMILab;
+    LMILab.saidaNormMatSup = saidaNormMatSupLMILab;
+    LMILab.saidaEstHInfLMILab = saidaEstHInfLMILab;
+    LMILab.saidaEstHInf = saidaEstHInf;
+
+    saida.LMILab = LMILab;
+
+    tempoAgora = datetime('now');
+    disp('Sintase LMI Lab Hibrido, tempo de execucao');tempoAgora-tempoRefencia
+    tempoRefencia = tempoAgora;
+     
+    %% ------------------Chama Avaliação Estabilidade com HInf garantida---
+    % saidaEstHInfSintase = estHInfSint(A,B,E,C,D,h,delta,tol);
+    % KCal = [eye(nx) zeros(nx,nu); saidaEstHInfSintase.K zeros(nu)];
+    % raioEspectralInf = verificaEstSisHib(ACal.inf, KCal, h);
+    % raioEspectralSup = verificaEstSisHib(ACal.sup, KCal, h);
+    % saidaNormMatInf = normaSistemaContinuo(A.inf+B.inf*saidaEstHInfSintase.K,E.inf,C.inf+D.inf*saidaEstHInfSintase.K,zeros(size(C.inf,1),size(E.inf,2)));
+    % saidaNormMatSup = normaSistemaContinuo(A.sup+B.sup*saidaEstHInfSintase.K,E.sup,C.sup+D.sup*saidaEstHInfSintase.K,zeros(size(C.sup,1),size(E.sup,2)));
+    % saidaEstHInfLMILab = valEstHInfLMILabInt(ACal,ECal,CCal,KCal,h,delta,tol);
+    % saidaEstHInf = valEstHInfInt(ACal,ECal,CCal,KCal,h,delta,tol);
+    % save([folderExample '/saida']);
+    % 
+    % % Salva para a saída
+    % yalmip.saidaEstHInfSintase = saidaEstHInfSintase;
+    % yalmip.raioEspectralInf = raioEspectralInf;
+    % yalmip.raioEspectralSup = raioEspectralSup;
+    % yalmip.saidaNormMatInf = saidaNormMatInf;
+    % yalmip.saidaNormMatSup = saidaNormMatSup;
+    % yalmip.saidaEstHInfLMILab = saidaEstHInfLMILab;
+    % yalmip.saidaEstHInf = saidaEstHInf;
+    % saida.yalmip = yalmip;
+    % 
+    % tempoAgora = datetime('now');
+    % disp('Sintase Yalmip Lab Hibrido, tempo de execucao');tempoAgora-tempoRefencia
+    % tempoRefencia = tempoAgora;
+    
+    %% ------------------Chama Avaliação Estabilidade com HInf garantida Politópica---
+%     Laço para converter estrutura de matriz
+    n = length(sysPolyCont);
+    APoly = cell(n,1);
+    BPoly = cell(n,1);
+    EPoly = cell(n,1);
+    CPoly = cell(n,1);
+    DPoly = cell(n,1);
+    for c = 1:n
+        APoly{c} = sysPolyCont{c}.A;
+        BPoly{c} = sysPolyCont{c}.B2;
+        EPoly{c} = sysPolyCont{c}.B1;
+        CPoly{c} = sysPolyCont{c}.C;
+        DPoly{c} = sysPolyCont{c}.D2;
+    end
+    
+    poly.APoly = APoly;
+    poly.BPoly = BPoly;
+    poly.EPoly = EPoly;
+    poly.CPoly = CPoly;
+    poly.DPoly = DPoly;
+    
+   %% ------------------Chama Avaliação Estabilidade com HInf garantida Politópica---
+    
+    saidaEstHInfSintaseLMILabPoly = estHInfSintPolyLMILab(poly,h,delta,tol);
+    KCal = [eye(nx) zeros(nx,nu); saidaEstHInfSintaseLMILabPoly.K zeros(nu)];
+    raioEspectralInf = verificaEstSisHib(ACal.inf, KCal, h);
+    raioEspectralSup = verificaEstSisHib(ACal.sup, KCal, h);
+    saidaNormMatInf = normaSistemaContinuo(A.inf+B.inf*saidaEstHInfSintaseLMILabPoly.K,E.inf,C.inf+D.inf*saidaEstHInfSintaseLMILabPoly.K,zeros(size(C.inf,1),size(E.inf,2)));
+    saidaNormMatSup = normaSistemaContinuo(A.sup+B.sup*saidaEstHInfSintaseLMILabPoly.K,E.sup,C.sup+D.sup*saidaEstHInfSintaseLMILabPoly.K,zeros(size(C.sup,1),size(E.sup,2)));
+    saidaEstHInfLMILab = valEstHInfLMILabInt(ACal,ECal,CCal,KCal,h,delta,tol);
+    saidaEstHInf = valEstHInfInt(ACal,ECal,CCal,KCal,h,delta,tol);
+    save([folderExample '/saida']);
+    
+    % Salva para a saída
+    politopo.saidaEstHInfSintaseLMILabPoly = saidaEstHInfSintaseLMILabPoly;
+    politopo.raioEspectralInf = raioEspectralInf;
+    politopo.raioEspectralSup = raioEspectralSup;
+    politopo.saidaNormMatInf = saidaNormMatInf;
+    politopo.saidaNormMatSup = saidaNormMatSup;
+    politopo.saidaEstHInfLMILab = saidaEstHInfLMILab;
+    politopo.saidaEstHInf = saidaEstHInf;
+    saida.politopo = politopo;
+    
+    tempoAgora = datetime('now');
+    disp('Sintase LMIL Politopo, tempo de execucao');tempoAgora-tempoRefencia
+    tempoRefencia = tempoAgora;
+    
+    
+    %%  ------------------Chama Avaliação Estabilidade com HInf garantida Politópica Sedumu---
+                                    
+    saidaEstHInfSintasePoly = estHInfSintPoly(poly,h,delta,tol);
+    KCal = [eye(nx) zeros(nx,nu); saidaEstHInfSintasePoly.K zeros(nu)];
+    raioEspectralInf = verificaEstSisHib(ACal.inf, KCal, h);
+    raioEspectralSup = verificaEstSisHib(ACal.sup, KCal, h);
+    saidaNormMatInf = normaSistemaContinuo(A.inf+B.inf*saidaEstHInfSintasePoly.K,E.inf,C.inf+D.inf*saidaEstHInfSintasePoly.K,zeros(size(C.inf,1),size(E.inf,2)));
+    saidaNormMatSup = normaSistemaContinuo(A.sup+B.sup*saidaEstHInfSintasePoly.K,E.sup,C.sup+D.sup*saidaEstHInfSintasePoly.K,zeros(size(C.sup,1),size(E.sup,2)));
+    saidaEstHInfLMILab = valEstHInfLMILabInt(ACal,ECal,CCal,KCal,h,delta,tol);
+    saidaEstHInf = valEstHInfInt(ACal,ECal,CCal,KCal,h,delta,tol);
+    save([folderExample '/saida']);
+    
+    % Salva para a saída
+    politopoSedumi.saidaEstHInfSintaseLMILabPoly = saidaEstHInfSintasePoly;
+    politopoSedumi.raioEspectralInf = raioEspectralInf;
+    politopoSedumi.raioEspectralSup = raioEspectralSup;
+    politopoSedumi.saidaNormMatInf = saidaNormMatInf;
+    politopoSedumi.saidaNormMatSup = saidaNormMatSup;
+    politopoSedumi.saidaEstHInfLMILab = saidaEstHInfLMILab;
+    politopoSedumi.saidaEstHInf = saidaEstHInf;
+    saida.politopoSedumu = politopoSedumi;
+    
+    tempoAgora = datetime('now');
+    disp('Sintase LMIL Politopo Sedumu, tempo de execucao');tempoAgora-tempoRefencia
+    tempoRefencia = tempoAgora;
+   
+    
+    %% Simulacao ganho híbrido
+    imageName = 'KIntHibrido';
+    axisVector = [0 10 -0.5 1.5];
+    flagIsPoly = false;
+    [outPutSimHibridoInt] = simulatesSampledInput(combPolyCont,h, saidaEstHInfSintaseLMILab.K,[folderExample '/' imageName],axisVector,delta,tol,flagIsPoly);
+    
+    saida.outPutSimHibridoInt = outPutSimHibridoInt;
+   
+    tempoAgora = datetime('now');
+    disp('Simulacao temporal, tempo de execucao');tempoAgora-tempoRefencia
+    tempoRefencia = tempoAgora;
+    
+    save([folderExample '/saida']);
+    
+    
+     %% Simulacao ganho híbrido Politopo
+    imageName = 'KIntHibridoPoly';
+    axisVector = [0 10 -0.5 1.5];
+    flagIsPoly = true;
+    [outPutSimHibridoIntPoly] = simulatesSampledInput(combPolyCont,h, saidaEstHInfSintaseLMILabPoly.K,[folderExample '/' imageName],axisVector,delta,tol,flagIsPoly);
+    
+    saida.outPutSimHibridoIntPoly = outPutSimHibridoIntPoly;
+   
+    tempoAgora = datetime('now');
+    disp('Simulacao temporal Politopo, tempo de execucao');tempoAgora-tempoRefencia
+    tempoRefencia = tempoAgora;
+    
+    save([folderExample '/saida']);
+  
+    
+    
+    
+  
+end

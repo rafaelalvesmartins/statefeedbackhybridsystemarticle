@@ -1,0 +1,10 @@
+function matInfSup = INTLAB2InfSup(mat)
+    
+    % Not infsup, then 
+    if(isnumeric(mat))
+    
+    
+    
+    matInfSup.inf = inf(mat);
+    matInfSup.sup = sup(mat);
+end
