@@ -20,6 +20,8 @@ function main_massa_mola_completo()
 
     % Adicionar caminhos necessários
     addpath('funcoes');
+    addpath('functions');
+    addpath('functions/Optimize');
     addpath('HInf - Análise - Intervalar/funcoes');
     addpath('HInf - Análise - Intervalar/funcoes/Diversas');
 
@@ -339,6 +341,180 @@ function main_massa_mola_completo()
     end
 
     %% =================================================================
+    %% ETAPA 3: SÍNTESE CONTÍNUA (COM INCERTEZAS)
+    %% =================================================================
+
+    fprintf('=====================================\n');
+    fprintf('ETAPA 3: SÍNTESE CONTÍNUA (COM INCERTEZAS)\n');
+    fprintf('=====================================\n');
+    fprintf('Usando funções: synHInfKContIntLMILab e synHInfKContPoly\n\n');
+
+    % Preparar matrizes e parâmetros para síntese contínua
+    fprintf('Preparando matrizes para síntese contínua...\n');
+
+    % Matrizes para síntese contínua (usando sistema com incertezas)
+    A_cont_unc = A_unc;
+    B2_cont_unc = B_unc;          % Entrada de controle (B2)
+    B1_cont_unc = E_unc;          % Entrada de perturbação (B1)
+    C_cont_unc = C_unc;
+    D2_cont_unc = D_unc;          % Feedthrough do controle (D2)
+
+    % Criar matriz D1 (feedthrough da perturbação) com dimensões corretas
+    num_saidas = size(C_cont_unc.inf, 1);        % número de saídas
+    num_perturbacoes = size(B1_cont_unc.inf, 2); % número de perturbações
+    D1_cont_unc = infsup(zeros(num_saidas, num_perturbacoes), zeros(num_saidas, num_perturbacoes));
+
+    % Inicializar estrutura de parâmetros corretamente
+    param_cont = struct();
+    param_cont.tol = tol;
+    param_cont.maxNormOfK = 1e8;  % Campo necessário para synHInfKContPoly
+
+    % Inicializar variáveis de sucesso e resultados
+    sucesso_cont_int_rob = false;
+    sucesso_cont_poly_rob = false;
+    K_cont_int_rob = [];
+    gamma_cont_int_rob = NaN;
+    tempo_cont_int_rob = 0;
+    K_cont_poly_rob = [];
+    gamma_cont_poly_rob = NaN;
+    tempo_cont_poly_rob = 0;
+
+    % Variáveis para métodos alternativos contínuos (versões não-LMILab)
+    sucesso_cont_int_alt = false;
+    sucesso_cont_poly_alt = false;
+    K_cont_int_alt = [];
+    gamma_cont_int_alt = NaN;
+    tempo_cont_int_alt = 0;
+    K_cont_poly_alt = [];
+    gamma_cont_poly_alt = NaN;
+    tempo_cont_poly_alt = 0;
+
+    fprintf('Dimensões das matrizes contínuas:\n');
+    fprintf('  A: %dx%d, B2: %dx%d, B1: %dx%d\n', size(A_cont_unc.inf,1), size(A_cont_unc.inf,2), size(B2_cont_unc.inf,1), size(B2_cont_unc.inf,2), size(B1_cont_unc.inf,1), size(B1_cont_unc.inf,2));
+    fprintf('  C: %dx%d, D2: %dx%d, D1: %dx%d\n\n', size(C_cont_unc.inf,1), size(C_cont_unc.inf,2), size(D2_cont_unc.inf,1), size(D2_cont_unc.inf,2), size(D1_cont_unc.inf,1), size(D1_cont_unc.inf,2));
+
+    %% MÉTODO 7: Abordagem Intervalar Contínua (Robusta)
+    fprintf('--- MÉTODO 7: Abordagem Intervalar Contínua (Robusta) ---\n');
+    try
+
+        tic;
+        resultado_cont_int_rob = synHInfKContIntLMILab(A_cont_unc, B2_cont_unc, B1_cont_unc, C_cont_unc, D2_cont_unc, D1_cont_unc, param_cont);
+        tempo_cont_int_rob = toc;
+
+        if isfield(resultado_cont_int_rob, 'feas') && resultado_cont_int_rob.feas == 1
+            K_cont_int_rob = resultado_cont_int_rob.K;
+            gamma_cont_int_rob = resultado_cont_int_rob.mu;
+            sucesso_cont_int_rob = true;
+
+            fprintf('✓ Síntese bem-sucedida!\n');
+            fprintf('  Ganho K: [%.6f %.6f %.6f %.6f]\n', K_cont_int_rob(1), K_cont_int_rob(2), K_cont_int_rob(3), K_cont_int_rob(4));
+            fprintf('  Norma γ: %.6f\n', gamma_cont_int_rob);
+            fprintf('  Tempo: %.4f s\n\n', tempo_cont_int_rob);
+        else
+            sucesso_cont_int_rob = false;
+            fprintf('✗ Síntese falhou!\n\n');
+        end
+
+    catch ME
+        sucesso_cont_int_rob = false;
+        fprintf('✗ Erro: %s\n\n', ME.message);
+    end
+
+    %% MÉTODO 8: Abordagem Politópica Contínua (Robusta)
+    fprintf('--- MÉTODO 8: Abordagem Politópica Contínua (Robusta) ---\n');
+    try
+        % Preparar politopo para síntese contínua
+        fprintf('Preparando politopo contínuo...\n');
+
+        % Usar o mesmo politopo robusto, mas adicionar D1Poly (feedthrough da perturbação)
+        poly_cont_rob = poly_rob;  % Copiar estrutura existente
+
+        % Adicionar D1Poly (feedthrough da perturbação) para cada vértice
+        % Dimensões: num_saidas x num_perturbacoes
+        d1_matriz = zeros(num_saidas, num_perturbacoes);
+        for idx_vert = 1:length(poly_cont_rob.APoly)
+            poly_cont_rob.D1Poly{idx_vert} = d1_matriz;  % D1 = zeros com dimensões corretas
+        end
+
+        fprintf('Politopo contínuo preparado com %d vértices.\n', length(poly_cont_rob.APoly));
+
+        tic;
+        resultado_cont_poly_rob = synHInfKContPoly(poly_cont_rob.APoly, poly_cont_rob.BPoly, poly_cont_rob.EPoly, poly_cont_rob.CPoly, poly_cont_rob.DPoly, poly_cont_rob.D1Poly, param_cont);
+        tempo_cont_poly_rob = toc;
+
+        if isfield(resultado_cont_poly_rob, 'feas') && resultado_cont_poly_rob.feas == 1
+            K_cont_poly_rob = resultado_cont_poly_rob.K;
+            gamma_cont_poly_rob = resultado_cont_poly_rob.norm;
+            sucesso_cont_poly_rob = true;
+
+            fprintf('✓ Síntese bem-sucedida!\n');
+            fprintf('  Ganho K: [%.6f %.6f %.6f %.6f]\n', K_cont_poly_rob(1), K_cont_poly_rob(2), K_cont_poly_rob(3), K_cont_poly_rob(4));
+            fprintf('  Norma γ: %.6f\n', gamma_cont_poly_rob);
+            fprintf('  Tempo: %.4f s\n\n', tempo_cont_poly_rob);
+        else
+            sucesso_cont_poly_rob = false;
+            fprintf('✗ Síntese falhou!\n\n');
+        end
+
+    catch ME
+        sucesso_cont_poly_rob = false;
+        fprintf('✗ Erro: %s\n\n', ME.message);
+    end
+
+    %% MÉTODO 9: Abordagem Intervalar Contínua Alternativa (synHInfKContInt)
+    fprintf('--- MÉTODO 9: Abordagem Intervalar Contínua Alternativa (synHInfKContInt) ---\n');
+    try
+        tic;
+        resultado_cont_int_alt = synHInfKContInt(A_cont_unc, B2_cont_unc, B1_cont_unc, C_cont_unc, D2_cont_unc, D1_cont_unc, param_cont);
+        tempo_cont_int_alt = toc;
+
+        if isfield(resultado_cont_int_alt, 'feas') && resultado_cont_int_alt.feas == 1
+            K_cont_int_alt = resultado_cont_int_alt.K;
+            gamma_cont_int_alt = resultado_cont_int_alt.norm;
+            sucesso_cont_int_alt = true;
+
+            fprintf('✓ Síntese bem-sucedida!\n');
+            fprintf('  Ganho K: [%.6f %.6f %.6f %.6f]\n', K_cont_int_alt(1), K_cont_int_alt(2), K_cont_int_alt(3), K_cont_int_alt(4));
+            fprintf('  Norma γ: %.6f\n', gamma_cont_int_alt);
+            fprintf('  Tempo: %.4f s\n\n', tempo_cont_int_alt);
+        else
+            sucesso_cont_int_alt = false;
+            fprintf('✗ Síntese falhou!\n\n');
+        end
+
+    catch ME
+        sucesso_cont_int_alt = false;
+        fprintf('✗ Erro: %s\n\n', ME.message);
+    end
+
+    %% MÉTODO 10: Abordagem Politópica Contínua Alternativa (synHInfKContPoly)
+    fprintf('--- MÉTODO 10: Abordagem Politópica Contínua Alternativa (synHInfKContPoly) ---\n');
+    try
+        tic;
+        % Usar o mesmo politopo contínuo preparado anteriormente
+        resultado_cont_poly_alt = synHInfKContPoly(poly_cont_rob.APoly, poly_cont_rob.BPoly, poly_cont_rob.EPoly, poly_cont_rob.CPoly, poly_cont_rob.DPoly, poly_cont_rob.D1Poly, param_cont);
+        tempo_cont_poly_alt = toc;
+
+        if isfield(resultado_cont_poly_alt, 'feas') && resultado_cont_poly_alt.feas == 1
+            K_cont_poly_alt = resultado_cont_poly_alt.K;
+            gamma_cont_poly_alt = resultado_cont_poly_alt.norm;
+            sucesso_cont_poly_alt = true;
+
+            fprintf('✓ Síntese bem-sucedida!\n');
+            fprintf('  Ganho K: [%.6f %.6f %.6f %.6f]\n', K_cont_poly_alt(1), K_cont_poly_alt(2), K_cont_poly_alt(3), K_cont_poly_alt(4));
+            fprintf('  Norma γ: %.6f\n', gamma_cont_poly_alt);
+            fprintf('  Tempo: %.4f s\n\n', tempo_cont_poly_alt);
+        else
+            sucesso_cont_poly_alt = false;
+            fprintf('✗ Síntese falhou!\n\n');
+        end
+
+    catch ME
+        sucesso_cont_poly_alt = false;
+        fprintf('✗ Erro: %s\n\n', ME.message);
+    end
+
+    %% =================================================================
     %% RESUMO DOS RESULTADOS
     %% =================================================================
 
@@ -347,13 +523,13 @@ function main_massa_mola_completo()
     fprintf('=====================================\n\n');
 
     % Tabela resumo
-    fprintf('MÉTODO                           | STATUS | γ         | TEMPO (s) | GANHO K (1x4)\n');
+    fprintf('MÉTODO                           | STATUS | γ²        | TEMPO (s) | GANHO K (1x4)\n');
     fprintf('--------------------------------|--------|-----------|-----------|----------------------------------------\n');
 
     % Resultados nominais
     if sucesso_int_nom
         fprintf('1. Intervalar (Nominal)          | %-6s | %9.6f | %8.4f | [%.4f %.4f %.4f %.4f]\n', ...
-            'OK', gamma_int_nom, tempo_int_nom, K_int_nom(1), K_int_nom(2), K_int_nom(3), K_int_nom(4));
+            'OK', gamma_int_nom^2, tempo_int_nom, K_int_nom(1), K_int_nom(2), K_int_nom(3), K_int_nom(4));
     else
         fprintf('1. Intervalar (Nominal)          | %-6s | %9s | %8s | %s\n', ...
             'FALHOU', 'N/A', 'N/A', 'N/A');
@@ -361,7 +537,7 @@ function main_massa_mola_completo()
 
     if sucesso_poly_nom
         fprintf('2. Politópica (Nominal)          | %-6s | %9.6f | %8.4f | [%.4f %.4f %.4f %.4f]\n', ...
-            'OK', gamma_poly_nom, tempo_poly_nom, K_poly_nom(1), K_poly_nom(2), K_poly_nom(3), K_poly_nom(4));
+            'OK', gamma_poly_nom^2, tempo_poly_nom, K_poly_nom(1), K_poly_nom(2), K_poly_nom(3), K_poly_nom(4));
     else
         fprintf('2. Politópica (Nominal)          | %-6s | %9s | %8s | %s\n', ...
             'FALHOU', 'N/A', 'N/A', 'N/A');
@@ -369,7 +545,7 @@ function main_massa_mola_completo()
 
     if sucesso_nom
         fprintf('3. Nominal Clássica              | %-6s | %9.6f | %8.4f | [%.4f %.4f %.4f %.4f]\n', ...
-            'OK', gamma_nom, tempo_nom, K_nom(1), K_nom(2), K_nom(3), K_nom(4));
+            'OK', gamma_nom^2, tempo_nom, K_nom(1), K_nom(2), K_nom(3), K_nom(4));
     else
         fprintf('3. Nominal Clássica              | %-6s | %9s | %8s | %s\n', ...
             'FALHOU', 'N/A', 'N/A', 'N/A');
@@ -380,7 +556,7 @@ function main_massa_mola_completo()
     % Resultados robustos
     if sucesso_int_rob
         fprintf('4. Intervalar (Robusta)          | %-6s | %9.6f | %8.4f | [%.4f %.4f %.4f %.4f]\n', ...
-            'OK', gamma_int_rob, tempo_int_rob, K_int_rob(1), K_int_rob(2), K_int_rob(3), K_int_rob(4));
+            'OK', gamma_int_rob^2, tempo_int_rob, K_int_rob(1), K_int_rob(2), K_int_rob(3), K_int_rob(4));
     else
         fprintf('4. Intervalar (Robusta)          | %-6s | %9s | %8s | %s\n', ...
             'FALHOU', 'N/A', 'N/A', 'N/A');
@@ -388,7 +564,7 @@ function main_massa_mola_completo()
 
     if sucesso_poly_rob
         fprintf('5. Politópica (Robusta)          | %-6s | %9.6f | %8.4f | [%.4f %.4f %.4f %.4f]\n', ...
-            'OK', gamma_poly_rob, tempo_poly_rob, K_poly_rob(1), K_poly_rob(2), K_poly_rob(3), K_poly_rob(4));
+            'OK', gamma_poly_rob^2, tempo_poly_rob, K_poly_rob(1), K_poly_rob(2), K_poly_rob(3), K_poly_rob(4));
     else
         fprintf('5. Politópica (Robusta)          | %-6s | %9s | %8s | %s\n', ...
             'FALHOU', 'N/A', 'N/A', 'N/A');
@@ -396,9 +572,44 @@ function main_massa_mola_completo()
 
     if sucesso_central
         fprintf('6. Nominal (Sistema Central)     | %-6s | %9.6f | %8.4f | [%.4f %.4f %.4f %.4f]\n', ...
-            'OK', gamma_central, tempo_central, K_central(1), K_central(2), K_central(3), K_central(4));
+            'OK', gamma_central^2, tempo_central, K_central(1), K_central(2), K_central(3), K_central(4));
     else
         fprintf('6. Nominal (Sistema Central)     | %-6s | %9s | %8s | %s\n', ...
+            'FALHOU', 'N/A', 'N/A', 'N/A');
+    end
+
+    fprintf('--------------------------------|--------|-----------|-----------|----------------------------------------\n');
+
+    % Resultados contínuos
+    if sucesso_cont_int_rob && ~isempty(K_cont_int_rob) && length(K_cont_int_rob) >= 4
+        fprintf('7. Intervalar (Contínua)         | %-6s | %9.6f | %8.4f | [%.4f %.4f %.4f %.4f]\n', ...
+            'OK', gamma_cont_int_rob^2, tempo_cont_int_rob, K_cont_int_rob(1), K_cont_int_rob(2), K_cont_int_rob(3), K_cont_int_rob(4));
+    else
+        fprintf('7. Intervalar (Contínua)         | %-6s | %9s | %8s | %s\n', ...
+            'FALHOU', 'N/A', 'N/A', 'N/A');
+    end
+
+    if sucesso_cont_poly_rob && ~isempty(K_cont_poly_rob) && length(K_cont_poly_rob) >= 4
+        fprintf('8. Politópica (Contínua)         | %-6s | %9.6f | %8.4f | [%.4f %.4f %.4f %.4f]\n', ...
+            'OK', gamma_cont_poly_rob^2, tempo_cont_poly_rob, K_cont_poly_rob(1), K_cont_poly_rob(2), K_cont_poly_rob(3), K_cont_poly_rob(4));
+    else
+        fprintf('8. Politópica (Contínua)         | %-6s | %9s | %8s | %s\n', ...
+            'FALHOU', 'N/A', 'N/A', 'N/A');
+    end
+
+    if sucesso_cont_int_alt && ~isempty(K_cont_int_alt) && length(K_cont_int_alt) >= 4
+        fprintf('9. Intervalar (Cont-Alt)         | %-6s | %9.6f | %8.4f | [%.4f %.4f %.4f %.4f]\n', ...
+            'OK', gamma_cont_int_alt^2, tempo_cont_int_alt, K_cont_int_alt(1), K_cont_int_alt(2), K_cont_int_alt(3), K_cont_int_alt(4));
+    else
+        fprintf('9. Intervalar (Cont-Alt)         | %-6s | %9s | %8s | %s\n', ...
+            'FALHOU', 'N/A', 'N/A', 'N/A');
+    end
+
+    if sucesso_cont_poly_alt && ~isempty(K_cont_poly_alt) && length(K_cont_poly_alt) >= 4
+        fprintf('10. Politópica (Cont-Alt)        | %-6s | %9.6f | %8.4f | [%.4f %.4f %.4f %.4f]\n', ...
+            'OK', gamma_cont_poly_alt^2, tempo_cont_poly_alt, K_cont_poly_alt(1), K_cont_poly_alt(2), K_cont_poly_alt(3), K_cont_poly_alt(4));
+    else
+        fprintf('10. Politópica (Cont-Alt)        | %-6s | %9s | %8s | %s\n', ...
             'FALHOU', 'N/A', 'N/A', 'N/A');
     end
 
@@ -463,11 +674,42 @@ function main_massa_mola_completo()
         resultados.ganhos.robusto.central.tempo = tempo_central;
     end
 
+    % Resultados das sínteses contínuas
+    if sucesso_cont_int_rob && ~isempty(K_cont_int_rob)
+        resultados.ganhos.continuo.intervalar.K = K_cont_int_rob;
+        resultados.ganhos.continuo.intervalar.gamma = gamma_cont_int_rob;
+        resultados.ganhos.continuo.intervalar.tempo = tempo_cont_int_rob;
+    end
+
+    if sucesso_cont_poly_rob && ~isempty(K_cont_poly_rob)
+        resultados.ganhos.continuo.politopica.K = K_cont_poly_rob;
+        resultados.ganhos.continuo.politopica.gamma = gamma_cont_poly_rob;
+        resultados.ganhos.continuo.politopica.tempo = tempo_cont_poly_rob;
+    end
+
+    % Resultados das sínteses contínuas alternativas
+    if sucesso_cont_int_alt && ~isempty(K_cont_int_alt)
+        resultados.ganhos.continuo_alternativo.intervalar.K = K_cont_int_alt;
+        resultados.ganhos.continuo_alternativo.intervalar.gamma = gamma_cont_int_alt;
+        resultados.ganhos.continuo_alternativo.intervalar.tempo = tempo_cont_int_alt;
+    end
+
+    if sucesso_cont_poly_alt && ~isempty(K_cont_poly_alt)
+        resultados.ganhos.continuo_alternativo.politopica.K = K_cont_poly_alt;
+        resultados.ganhos.continuo_alternativo.politopica.gamma = gamma_cont_poly_alt;
+        resultados.ganhos.continuo_alternativo.politopica.tempo = tempo_cont_poly_alt;
+    end
+
     % Salvar workspace
     save('resultados_completos_massa_mola.mat', 'resultados');
 
     fprintf('Resultados salvos em: resultados_completos_massa_mola.mat\n\n');
     fprintf('=== SÍNTESE COMPLETA FINALIZADA COM SUCESSO ===\n');
     fprintf('Sistema baseado na estrutura do genSaveDataEx12\n');
+    fprintf('10 métodos de síntese implementados:\n');
+    fprintf('  - Métodos 1-3: Sínteses nominais\n');
+    fprintf('  - Métodos 4-6: Sínteses robustas (amostrado)\n');
+    fprintf('  - Métodos 7-8: Sínteses robustas (contínuo - LMILab)\n');
+    fprintf('  - Métodos 9-10: Sínteses robustas (contínuo - alternativo)\n\n');
 
 end

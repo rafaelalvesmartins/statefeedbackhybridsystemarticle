@@ -75,7 +75,7 @@ function outPut = synHInfKContPoly(APoly,B2Poly,B1Poly,CPoly,D2Poly,D1Poly,param
     outPut.var = size(getvariables(LMIs),2);
     
     % sol = optimize(LMIs,obj,sdpsettings('shift','1','verbose',0,'solver','sedumi','sedumi.eps',1e-20,'sedumi.maxiter',2000,'sedumi.numtol',1e-20));
-     sol = optimize(LMIs,obj,sdpsettings('verbose',0,'solver','sedumi'));
+     sol = optimize(LMIs,obj,sdpsettings('verbose',0,'solver','mosek'));
     
     
     outPut.cpusec = sol.solvertime;
