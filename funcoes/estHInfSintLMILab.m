@@ -1,4 +1,4 @@
-function saida = valEstHInfSint(A,B,E,C,D,h,delta,tol)
+function saida = estHInfSintLMILab(A,B,E,C,D,h,delta,tol)
     % valEstHInfSint
     %
     % Sintase Ganho K com custo HInf garantido de um sistema híbrido
