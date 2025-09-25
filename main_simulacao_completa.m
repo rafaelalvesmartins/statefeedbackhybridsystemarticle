@@ -219,7 +219,7 @@ function main_simulacao_completa()
     fprintf('--- SIMULAÇÃO 1: %s (Monte Carlo) ---\n', nomes_controladores{1});
     try
         imageName = sprintf('Sim1_HInf_Nominal_Sampled');
-        flagIsPoly = false;  % Usa análise intervalar
+        flagIsPoly = true;  % Usa análise intervalar
         tic;
 
         fprintf('    Testando controlador nos %d sistemas Monte Carlo fixos...\n', numSimulacoesMC);
@@ -271,7 +271,7 @@ function main_simulacao_completa()
     fprintf('--- SIMULAÇÃO 2: %s (Monte Carlo) ---\n', nomes_controladores{2});
     try
         imageName = sprintf('Sim2_HInf_Robust_Interval');
-        flagIsPoly = false;  % Usa análise intervalar
+        flagIsPoly = true;  % Usa análise intervalar
         tic;
         output_sim2 = simulatesSampledInputMonteCarlo(sistemas_monte_carlo_fixos, h, K_robust_interval, imageName, axisVector, delta, tol, flagIsPoly);
         tempo_sim2 = toc;
@@ -304,7 +304,7 @@ function main_simulacao_completa()
     fprintf('--- SIMULAÇÃO 3: %s (Monte Carlo) ---\n', nomes_controladores{3});
     try
         imageName = sprintf('Sim3_HInf_Robust_Polytopic');
-        flagIsPoly = false;   % Usa análise politópica
+        flagIsPoly = true;   % Usa análise politópica
         tic;
         output_sim3 = simulatesSampledInputMonteCarlo(sistemas_monte_carlo_fixos, h, K_robust_polytopic, imageName, axisVector, delta, tol, flagIsPoly);
         tempo_sim3 = toc;
@@ -337,7 +337,7 @@ function main_simulacao_completa()
     fprintf('--- SIMULAÇÃO 4: %s (Monte Carlo) ---\n', nomes_controladores{4});
     try
         imageName = sprintf('Sim4_HInf_Continuous_Sampled');
-        flagIsPoly = false;  % Usa análise intervalar para implementação amostrada
+        flagIsPoly = true;  % Usa análise intervalar para implementação amostrada
         tic;
         output_sim4 = simulatesSampledInputMonteCarlo(sistemas_monte_carlo_fixos, h, K_continuous_sampled, imageName, axisVector, delta, tol, flagIsPoly);
         tempo_sim4 = toc;

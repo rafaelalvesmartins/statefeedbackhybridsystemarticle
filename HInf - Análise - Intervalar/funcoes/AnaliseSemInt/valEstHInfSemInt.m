@@ -1,24 +1,24 @@
 function saida = valEstHInfSemInt(ACal,ECal,CCal,KCal,h,delta,tol)
     % validarLMIHInf
     %
-    % Avaliar norma HInf de um sistema híbrido da tese do Matheus
+    % Avaliar norma HInf de um sistema hï¿½brido da tese do Matheus
     %
     % input:  ACal,ECal,CCal,KCal -> Matrizes aumentadas
-    %         h -> período de amostragem
-    %         delta -> relacionada a aproximação da derivada
-    %         tol -> tolerância do solver
+    %         h -> perï¿½odo de amostragem
+    %         delta -> relacionada a aproximaï¿½ï¿½o da derivada
+    %         tol -> tolerï¿½ncia do solver
     %
     % output: saida.X -> Matriz Lyapunov
     %
     % Criado date: 21 Mar 2020
-    % Revisão date: 21 Mar 2020
+    % Revisï¿½o date: 21 Mar 2020
     % Autor: rafaelmartinsalves@gmail.com
 
-    % Dimensões das matrizes de entrada
+    % Dimensï¿½es das matrizes de entrada
     nXi = length(ACal);
     nW = size(ECal, 2);
     
-    % Inicialização das variáveis LMIs
+    % Inicializaï¿½ï¿½o das variï¿½veis LMIs
     saida.cpuSeg_m = clock;
     %LMI contador de linhas
     saida.linhas = 0;
@@ -33,11 +33,11 @@ function saida = valEstHInfSemInt(ACal,ECal,CCal,KCal,h,delta,tol)
         LMIs = LMIs + (X{i} >= 0);
     end
     
-    % Função objetiva
+    % Funï¿½ï¿½o objetiva
     mu = sdpvar(1,1);
     obj = mu;
     
-    % Montar as restrições LMIs
+    % Montar as restriï¿½ï¿½es LMIs
     for i=1:(quantInt-1)
         der = (X{i+1}-X{i})/delta;
    
@@ -55,7 +55,7 @@ function saida = valEstHInfSemInt(ACal,ECal,CCal,KCal,h,delta,tol)
         
     end
     
-    % Restrição para garantir que a Lyapunov sempre decai
+    % Restriï¿½ï¿½o para garantir que a Lyapunov sempre decai
     U11 = X{quantInt};
     U21 = X{1}*KCal;
     U22 = X{1};
@@ -65,21 +65,21 @@ function saida = valEstHInfSemInt(ACal,ECal,CCal,KCal,h,delta,tol)
     
     LMIs = LMIs + (T >= 0);
     
-    % Conta qtd de linhas LMIs, tempo de montagem e qtd de variáveis
+    % Conta qtd de linhas LMIs, tempo de montagem e qtd de variï¿½veis
     saida.linhas = saida.linhas + size(T,1);
     saida.cpuSeg_m = etime(clock,saida.cpuSeg_m);
     saida.var = size(getvariables(LMIs),2);
     
     % Resolve as LMIs  
-    sol = optimize(LMIs,obj,sdpsettings('verbose',0,'solver','sedumi'));
+    sol = optimize(LMIs,obj,sdpsettings('verbose',0,'solver','mosek'));
     saida.cpusec = sol.solvertime;
     
-    % Checar a solução
+    % Checar a soluï¿½ï¿½o
     p = min(checkset(LMIs));
     saida.delta = p;
     saida.factivel = 0;
     
-    if(p > -tol ) % Factível
+    if(p > -tol ) % Factï¿½vel
         saida.factivel = 1;
         for i=1:quantInt
             saida.X{i} = double(X{i});

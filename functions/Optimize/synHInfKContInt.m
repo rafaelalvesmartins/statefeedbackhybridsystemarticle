@@ -336,7 +336,7 @@ function outPut = synHInfKContInt(A,B2,B1,C,D2,D1,param)
     outPut.cpusec_m = etime(clock,outPut.cpusec_m);
     outPut.var = size(getvariables(LMIs),2);
     
-    sol = optimize(LMIs,obj,sdpsettings('shift','1','verbose',0,'solver','sedumi','sedumi.eps',1e-20,'sedumi.maxiter',2000,'sedumi.numtol',1e-20));
+    sol = optimize(LMIs,obj,sdpsettings('shift','1','verbose',0,'solver','mosek','sedumi.eps',1e-20,'sedumi.maxiter',2000,'sedumi.numtol',1e-20));
     
     
     outPut.cpusec = sol.solvertime;

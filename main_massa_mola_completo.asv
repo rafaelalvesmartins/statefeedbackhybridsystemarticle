@@ -836,7 +836,7 @@ function main_massa_mola_completo()
                         resultados.analise_ganhos.nominal_classico_intervalar.diferenca_percentual = (resultado.gamma - gamma_nom)/gamma_nom*100;
                         resultados.analise_ganhos.nominal_classico_intervalar.funcao_usada = func_name;
                         resultados.analise_ganhos.nominal_classico_intervalar.tempo_analise = tempo;
-                        % break; % Usar apenas o primeiro que funcionar
+                        break; % Usar apenas o primeiro que funcionar
                     else
                         fprintf('✗ Falhou - γ inválido\n');
                     end
@@ -1171,7 +1171,7 @@ function main_massa_mola_completo()
                         resultados.analise_ganhos.todos_ganhos.(campo_nome).funcao_usada = func_name;
 
                         sucesso_teste = true;
-                        % break;
+                        break;
                     end
                 catch
                     % Continua para próxima função
