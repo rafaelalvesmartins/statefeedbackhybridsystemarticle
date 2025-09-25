@@ -1,0 +1,36 @@
+[Warning: The following error occurred while evaluating hgrc: Trying to load file "C:\Program Files\MATLAB\R2023a\bin\win64\hgbuiltins.dll" while it is being loaded.] 
+
+ 
+ 
+**************************************************************
+*** Welcome to INTLAB - INTerval LABoratory Version 10.2   
+***   The Matlab/Octave toolbox for Reliable Computing     
+***   Siegfried M. Rump, Institute for Reliable Computing  
+***   Hamburg University of Technology, Germany            
+ 
+ 
+INTLAB uses several control variables; to check the default values call "intlabsetting"
+ 
+=========================================================================
+*****  Please provide proper reference to                                
+*****     S.M. Rump: INTLAB - INTerval LABoratory. In Tibor Csendes,     
+*****       editor, Developments in Reliable Computing, pages 77-104.    
+*****       Kluwer Academic Publishers, Dordrecht, 1999,                 
+*****       http://www.ti3.tuhh.de/intlab .                              
+*****                                                                    
+*****  Commercial use or use in conjunction with a commercial program    
+*****  which requires INTLAB or part of INTLAB to function properly      
+*****  requires a special license. Please contact me  rump (at) tuhh.de  
+ 
+ 
+=== TESTE RPIDO DAS CORREÄES ===
+Configurando paths para LMI functions...\n   Adicionado: G:\My Drive\2025\Unicamp\Artigo Realmentaáo de Estado Hinf\funcoes\n   Adicionado: G:\My Drive\2025\Unicamp\Artigo Realmentaáo de Estado Hinf\funcoes\Diversas\n   No encontrado: G:\My Drive\2025\Unicamp\Artigo Realmentaáo de Estado Hinf\funcoes\Optimize\n   Adicionado: G:\My Drive\2025\Unicamp\Artigo Realmentaáo de Estado Hinf\HInf - An†lise - Intervalar\funcoes\n   Adicionado: G:\My Drive\2025\Unicamp\Artigo Realmentaáo de Estado Hinf\HInf - An†lise - Intervalar\funcoes\AnaliseSemInt\n   Adicionado: G:\My Drive\2025\Unicamp\Artigo Realmentaáo de Estado Hinf\HInf - An†lise - Intervalar\funcoes\Diversas\n   Adicionado: G:\My Drive\2025\Unicamp\Artigo Realmentaáo de Estado Hinf\functions\n   Adicionado: G:\My Drive\2025\Unicamp\Artigo Realmentaáo de Estado Hinf\functions\Optimize\nTotal de 7 paths adicionados ao MATLAB.\n\nVerificando funáes cr°ticas:\n   valEstHInfLMILab\n   valEstHInfLMILabSemInt\n   valEstHInfLMILabInt\n   estHInfAnaPolyLMILab\n   estHInfAnaPolyLMILabOriginal\n\nSetup de paths conclu°do!\n
+Verificando funáes:
+ valEstHInfLMILab encontrada
+ estHInfAnaPolyLMILab encontrada
+
+=== TESTE SINTêTICO RPIDO ===
+Testando valEstHInfLMILab...
+        Usando an†lise sem intervalos...\n LMI falhou, mas funáo foi chamada sem erro
+
+=== TESTE CONCLUDO ===

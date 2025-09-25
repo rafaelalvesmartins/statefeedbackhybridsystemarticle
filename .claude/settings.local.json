@@ -6,7 +6,8 @@
       "Bash(move avaliaMonteCarloControladores.m backup_Comparacao_5 )",
       "Bash(move simulaRespostaDegrauControladores.m backup_Comparacao_5 )",
       "Bash(move comparacaoCompletaControladores.m backup_Comparacao_5)",
-      "Bash(mkdir:*)"
+      "Bash(mkdir:*)",
+      "Bash(matlab:*)"
     ],
     "deny": [],
     "ask": []

@@ -1,0 +1,746 @@
+function main_simulacao_completa()
+%   MAIN_SIMULACAO_COMPLETA - Resposta Específica ao Revisor
+%
+%   Comparação focada conforme solicitação do revisor:
+%   b) Comparação entre representações norm-bounded e politópicas da incerteza
+%
+%   Análises incluídas:
+%   1. Comparação entre controladores H∞ com incertezas intervalares vs politópicas
+%   2. Performance de controlador H∞ nominal amostrado em cenários incertos
+%   3. Performance com implementação amostrada de controlador H∞ contínuo incerto
+%   4. Significância da presença de incertezas na implementação amostrada
+%
+%   Autor: Resposta ao Revisor
+%   Data: 2025
+
+    %% =================================================================
+    %% 1. CONFIGURAÇÃO E CARREGAMENTO - RESPOSTA AO REVISOR
+    %% =================================================================
+
+    clear; clc; close all;
+
+    fprintf('==================================================================================\n');
+    fprintf('                      RESPOSTA ESPECÍFICA AO REVISOR\n');
+    fprintf('     Comparação entre norm-bounded e politópico + análise de incertezas\n');
+    fprintf('==================================================================================\n\n');
+
+    fprintf('Iniciando análise focada conforme solicitação do revisor...\n');
+    fprintf('Data/Hora: %s\n\n', datestr(now, 'dd/mm/yyyy HH:MM:SS'));
+
+    % Adicionar caminhos necessários
+    setup_paths();
+    fprintf('\n');
+    addpath('funcoes');
+    addpath('functions');
+    addpath('functions/Poly');
+    addpath('HInf - Análise - Intervalar/funcoes');
+    addpath('HInf - Análise - Intervalar/funcoes/Diversas');
+
+    % Carregar resultados das sínteses
+    fprintf('Carregando controladores sintetizados...\n');
+    try
+        load('resultados_completos_massa_mola.mat', 'resultados');
+        fprintf('✓ Controladores carregados com sucesso!\n');
+        fprintf('  Sistema: h=%.4f, delta=%.6f\n\n', ...
+            resultados.parametros.h, resultados.parametros.delta);
+    catch ME
+        error('ERRO: Execute primeiro main_massa_mola_completo.m para gerar os controladores');
+    end
+
+    %% =================================================================
+    %% 2. EXTRAÇÃO DOS CONTROLADORES ESPECÍFICOS PARA O REVISOR
+    %% =================================================================
+
+    fprintf('Extraindo controladores específicos conforme solicitação do revisor...\n\n');
+
+    % CONTROLADOR 1: H∞ Nominal Sampled-Time (para teste em cenários incertos)
+    if isfield(resultados.ganhos, 'nominal') && isfield(resultados.ganhos.nominal, 'classica')
+        K_nominal_sampled = resultados.ganhos.nominal.classica.K;
+        gamma_nominal_sampled = resultados.ganhos.nominal.classica.gamma;
+        fprintf('✓ CONTROLADOR 1: H∞ Nominal Amostrado\n');
+        fprintf('    K = [%.6f %.6f %.6f %.6f], γ = %.6f\n', K_nominal_sampled, gamma_nominal_sampled);
+    else
+        error('Controlador H∞ nominal amostrado não encontrado!');
+    end
+
+    % CONTROLADOR 2: H∞ Robusto Intervalar (norm-bounded uncertainty)
+    if isfield(resultados.ganhos, 'robusto') && isfield(resultados.ganhos.robusto, 'intervalar')
+        K_robust_interval = resultados.ganhos.robusto.intervalar.K;
+        gamma_robust_interval = resultados.ganhos.robusto.intervalar.gamma;
+        fprintf('✓ CONTROLADOR 2: H∞ Robusto Intervalar (norm-bounded)\n');
+        fprintf('    K = [%.6f %.6f %.6f %.6f], γ = %.6f\n', K_robust_interval, gamma_robust_interval);
+    else
+        error('Controlador H∞ robusto intervalar não encontrado!');
+    end
+
+    % CONTROLADOR 3: H∞ Robusto Politópico (polytopic uncertainty)
+    if isfield(resultados.ganhos, 'robusto') && isfield(resultados.ganhos.robusto, 'politopica')
+        K_robust_polytopic = resultados.ganhos.robusto.politopica.K;
+        gamma_robust_polytopic = resultados.ganhos.robusto.politopica.gamma;
+        fprintf('✓ CONTROLADOR 3: H∞ Robusto Politópico (polytopic)\n');
+        fprintf('    K = [%.6f %.6f %.6f %.6f], γ = %.6f\n', K_robust_polytopic, gamma_robust_polytopic);
+    else
+        error('Controlador H∞ robusto politópico não encontrado!');
+    end
+
+    % CONTROLADOR 4: H∞ Contínuo Incerto (implementação amostrada)
+    if isfield(resultados.ganhos, 'continuo') && isfield(resultados.ganhos.continuo, 'intervalar')
+        K_continuous_sampled = resultados.ganhos.continuo.intervalar.K;
+        gamma_continuous_sampled = resultados.ganhos.continuo.intervalar.gamma;
+        fprintf('✓ CONTROLADOR 4: H∞ Contínuo Incerto (implementação amostrada)\n');
+        fprintf('    K = [%.6f %.6f %.6f %.6f], γ = %.6f\n', K_continuous_sampled, gamma_continuous_sampled);
+    else
+        error('Controlador H∞ contínuo incerto não encontrado!');
+    end
+
+    fprintf('\n✓ Todos os 4 controladores necessários foram encontrados!\n\n');
+
+    %% =================================================================
+    %% 3. PREPARAÇÃO DO SISTEMA COM POLITOPO PARA SIMULAÇÃO AMOSTRADA
+    %% =================================================================
+
+    fprintf('Preparando sistema politópico para simulação amostrada correta...\n');
+
+    % Parâmetros do sistema
+    m1 = resultados.parametros.m1;
+    m2 = resultados.parametros.m2;
+    k1 = resultados.parametros.k1;
+    k2 = resultados.parametros.k2;
+    b = resultados.parametros.b;
+    h = resultados.parametros.h;
+    delta = resultados.parametros.delta;
+    tol = 1e-6;
+
+    fprintf('Sistema base: m1=%.1f, m2=%.1f, k1=%.0f, k2=%.0f, b=%.2f\n', m1, m2, k1, k2, b);
+    fprintf('Parâmetros: h=%.4f, delta=%.6f, tol=%.0e\n', h, delta, tol);
+
+    % Gerar politopo com incertezas conforme genSaveDataEx12
+    % Incertezas: k2 ±2%, b ±5%
+    k2_vals = [k2*0.98, k2*1.02];  % k2 com ±2%
+    b_vals = [b*0.95, b*1.05];      % b com ±5%
+
+    idx = 0;
+    sysPolyCont = {};
+
+    fprintf('Gerando vértices do politopo:\n');
+    for i = 1:length(k2_vals)
+        for j = 1:length(b_vals)
+            idx = idx + 1;
+
+            % Sistema para este vértice
+            A_vertex = [0                                    0                   1                    0;
+                        0                                    0                   0                    1;
+                        (-k2_vals(i)-k1)/m1                 k2_vals(i)/m1      -b_vals(j)/m1        b_vals(j)/m1;
+                        k2_vals(i)/m2                       -k2_vals(i)/m2      b_vals(j)/m2        -b_vals(j)/m2];
+
+            sysPolyCont{idx}.A = A_vertex;
+            sysPolyCont{idx}.B = [0; 0; 0; 1/m2];           % Entrada de controle
+            sysPolyCont{idx}.E = [0; 0; 1/m1; 0];           % Entrada de perturbação
+            sysPolyCont{idx}.C = [0 10 0 0; 0 0 0 1; 0 0 0 0];  % Saídas conforme genSaveDataEx12
+            sysPolyCont{idx}.D = [0; 0; 1];                 % Feedthrough
+            sysPolyCont{idx}.D1 = [0; 0; 0];                % Feedthrough perturbação
+
+            fprintf('  Vértice %d: k2=%.3f, b=%.4f\n', idx, k2_vals(i), b_vals(j));
+        end
+    end
+
+    % Preparar estrutura combPoly para simulatesSampledInput
+    combPoly = struct();
+    for i = 1:idx
+        combPoly.A.alphaVecs{i} = i;
+        combPoly.A.polytopicMatrices{i} = sysPolyCont{i}.A;
+
+        combPoly.B.alphaVecs{i} = i;
+        combPoly.B.polytopicMatrices{i} = sysPolyCont{i}.B;
+
+        combPoly.E.alphaVecs{i} = i;
+        combPoly.E.polytopicMatrices{i} = sysPolyCont{i}.E;
+
+        combPoly.C.alphaVecs{i} = i;
+        combPoly.C.polytopicMatrices{i} = sysPolyCont{i}.C;
+
+        combPoly.D.alphaVecs{i} = i;
+        combPoly.D.polytopicMatrices{i} = sysPolyCont{i}.D;
+
+        combPoly.D1.alphaVecs{i} = i;
+        combPoly.D1.polytopicMatrices{i} = sysPolyCont{i}.D1;
+    end
+
+    fprintf('✓ Politopo preparado: %d vértices para simulação amostrada\n\n', idx);
+
+    %% =================================================================
+    %% 4. SIMULAÇÕES AMOSTRADAS CONFORME SOLICITAÇÃO DO REVISOR
+    %% =================================================================
+
+    fprintf('==================================================================================\n');
+    fprintf('       EXECUTANDO SIMULAÇÕES AMOSTRADAS - RESPOSTA AO REVISOR\n');
+    fprintf('==================================================================================\n\n');
+
+    % Controladores para análise
+    nomes_controladores = {
+        'H∞ Nominal Sampled';
+        'H∞ Robust Interval';
+        'H∞ Robust Polytopic';
+        'H∞ Continuous Sampled'
+    };
+
+    controladores_K = {K_nominal_sampled; K_robust_interval; K_robust_polytopic; K_continuous_sampled};
+    controladores_gamma = [gamma_nominal_sampled; gamma_robust_interval; gamma_robust_polytopic; gamma_continuous_sampled];
+    resultados_simulacao = cell(4, 1);
+
+    % Parâmetros de simulação
+    axisVector = [0 15 -0.5 1.5];  % Eixos para gráficos
+
+    fprintf('Executando simulações amostradas usando LMIs adequadas...\n\n');
+
+    % Configurar número de simulações Monte Carlo
+    numSimulacoesMC = 100;
+    fprintf('Configuração Monte Carlo: %d simulações aleatórias (MESMOS sistemas para TODOS os controladores)\n\n');
+
+    % GERAR SISTEMAS MONTE CARLO FIXOS (UMA ÚNICA VEZ)
+    fprintf('==================================================================================\n');
+    fprintf('                    GERANDO SISTEMAS MONTE CARLO FIXOS\n');
+    fprintf('==================================================================================\n\n');
+
+    % Preparar parâmetros do sistema para Monte Carlo
+    parametros_sistema.m1 = m1;
+    parametros_sistema.m2 = m2;
+    parametros_sistema.k1 = k1;
+    parametros_sistema.k2 = k2;
+    parametros_sistema.b = b;
+
+    % Gerar sistemas Monte Carlo fixos (com semente para reprodutibilidade)
+    seed_monte_carlo = 12345;  % Semente fixa para reprodutibilidade
+    sistemas_monte_carlo_fixos = gerarSistemasMonteCarloFixos(parametros_sistema, numSimulacoesMC, seed_monte_carlo);
+
+    fprintf('✓ %d sistemas Monte Carlo gerados e prontos para teste!\n\n', numSimulacoesMC);
+
+    % SIMULAÇÃO 1: H∞ Nominal Sampled-Time (MONTE CARLO)
+    fprintf('--- SIMULAÇÃO 1: %s (Monte Carlo) ---\n', nomes_controladores{1});
+    try
+        imageName = sprintf('Sim1_HInf_Nominal_Sampled');
+        flagIsPoly = false;  % Usa análise intervalar
+        tic;
+
+        fprintf('    Testando controlador nos %d sistemas Monte Carlo fixos...\n', numSimulacoesMC);
+        fprintf('    Parâmetros: h=%.4f, delta=%.6f, tol=%.0e, flagIsPoly=%d\n', h, delta, tol, flagIsPoly);
+        fprintf('    K = [%.6f %.6f %.6f %.6f]\n', K_nominal_sampled);
+
+        output_sim1 = simulatesSampledInputMonteCarlo(sistemas_monte_carlo_fixos, h, K_nominal_sampled, imageName, axisVector, delta, tol, flagIsPoly);
+        tempo_sim1 = toc;
+
+        resultados_simulacao{1} = output_sim1;
+
+        fprintf('  ✓ Simulação concluída: %.2f s\n', tempo_sim1);
+
+        % Debug: mostrar todos os campos disponíveis
+        fprintf('    Debug - Campos disponíveis: ');
+        campos = fieldnames(output_sim1);
+        for i = 1:length(campos)
+            fprintf('%s ', campos{i});
+        end
+        fprintf('\n');
+
+        % Verificar quais campos existem e reportar adequadamente
+        if isfield(output_sim1, 'maxCost')
+            fprintf('    Custo máximo: %.6f\n', output_sim1.maxCost);
+            fprintf('    Custo médio: %.6f ± %.6f\n', output_sim1.meanCost, output_sim1.stdCost);
+        else
+            fprintf('    ⚠ Campos de custo não disponíveis (possível falha na simulação)\n');
+        end
+
+        if isfield(output_sim1, 'gamma') && isfield(output_sim1.gamma, 'meanGamma')
+            fprintf('    γ médio (LMI): %.6f\n', output_sim1.gamma.meanGamma);
+            fprintf('    γ máximo (LMI): %.6f\n', output_sim1.gamma.maxGamma);
+            fprintf('    Taxa sucesso LMI: %.1f%%\n', output_sim1.lmi_success_rate * 100);
+            if isfield(output_sim1, 'sim_success_rate')
+                fprintf('    Taxa sucesso simulação: %.1f%%\n', output_sim1.sim_success_rate * 100);
+            end
+        else
+            fprintf('    ⚠ Campos de gamma não disponíveis\n');
+        end
+
+    catch ME
+        fprintf('  ✗ ERRO: %s\n', ME.message);
+        fprintf('    Stack: %s\n', ME.stack(1).name);
+        resultados_simulacao{1} = [];
+    end
+    fprintf('\n');
+
+    % SIMULAÇÃO 2: H∞ Robust Interval (norm-bounded) (MONTE CARLO)
+    fprintf('--- SIMULAÇÃO 2: %s (Monte Carlo) ---\n', nomes_controladores{2});
+    try
+        imageName = sprintf('Sim2_HInf_Robust_Interval');
+        flagIsPoly = false;  % Usa análise intervalar
+        tic;
+        output_sim2 = simulatesSampledInputMonteCarlo(sistemas_monte_carlo_fixos, h, K_robust_interval, imageName, axisVector, delta, tol, flagIsPoly);
+        tempo_sim2 = toc;
+
+        resultados_simulacao{2} = output_sim2;
+
+        fprintf('  ✓ Simulação concluída: %.2f s\n', tempo_sim2);
+
+        if isfield(output_sim2, 'maxCost')
+            fprintf('    Custo máximo: %.6f\n', output_sim2.maxCost);
+            fprintf('    Custo médio: %.6f ± %.6f\n', output_sim2.meanCost, output_sim2.stdCost);
+        else
+            fprintf('    ⚠ Campos de custo não disponíveis\n');
+        end
+
+        if isfield(output_sim2, 'gamma') && isfield(output_sim2.gamma, 'meanGamma')
+            fprintf('    γ médio (LMI): %.6f\n', output_sim2.gamma.meanGamma);
+            fprintf('    γ máximo (LMI): %.6f\n', output_sim2.gamma.maxGamma);
+        else
+            fprintf('    ⚠ Campos de gamma não disponíveis\n');
+        end
+
+    catch ME
+        fprintf('  ✗ ERRO: %s\n', ME.message);
+        resultados_simulacao{2} = [];
+    end
+    fprintf('\n');
+
+    % SIMULAÇÃO 3: H∞ Robust Polytopic (MONTE CARLO)
+    fprintf('--- SIMULAÇÃO 3: %s (Monte Carlo) ---\n', nomes_controladores{3});
+    try
+        imageName = sprintf('Sim3_HInf_Robust_Polytopic');
+        flagIsPoly = true;   % Usa análise politópica
+        tic;
+        output_sim3 = simulatesSampledInputMonteCarlo(sistemas_monte_carlo_fixos, h, K_robust_polytopic, imageName, axisVector, delta, tol, flagIsPoly);
+        tempo_sim3 = toc;
+
+        resultados_simulacao{3} = output_sim3;
+
+        fprintf('  ✓ Simulação concluída: %.2f s\n', tempo_sim3);
+
+        if isfield(output_sim3, 'maxCost')
+            fprintf('    Custo máximo: %.6f\n', output_sim3.maxCost);
+            fprintf('    Custo médio: %.6f ± %.6f\n', output_sim3.meanCost, output_sim3.stdCost);
+        else
+            fprintf('    ⚠ Campos de custo não disponíveis\n');
+        end
+
+        if isfield(output_sim3, 'gamma') && isfield(output_sim3.gamma, 'meanGamma')
+            fprintf('    γ médio (LMI): %.6f\n', output_sim3.gamma.meanGamma);
+            fprintf('    γ máximo (LMI): %.6f\n', output_sim3.gamma.maxGamma);
+        else
+            fprintf('    ⚠ Campos de gamma não disponíveis\n');
+        end
+
+    catch ME
+        fprintf('  ✗ ERRO: %s\n', ME.message);
+        resultados_simulacao{3} = [];
+    end
+    fprintf('\n');
+
+    % SIMULAÇÃO 4: H∞ Continuous with Sampled-Time Implementation (MONTE CARLO)
+    fprintf('--- SIMULAÇÃO 4: %s (Monte Carlo) ---\n', nomes_controladores{4});
+    try
+        imageName = sprintf('Sim4_HInf_Continuous_Sampled');
+        flagIsPoly = false;  % Usa análise intervalar para implementação amostrada
+        tic;
+        output_sim4 = simulatesSampledInputMonteCarlo(sistemas_monte_carlo_fixos, h, K_continuous_sampled, imageName, axisVector, delta, tol, flagIsPoly);
+        tempo_sim4 = toc;
+
+        resultados_simulacao{4} = output_sim4;
+
+        fprintf('  ✓ Simulação concluída: %.2f s\n', tempo_sim4);
+
+        if isfield(output_sim4, 'maxCost')
+            fprintf('    Custo máximo: %.6f\n', output_sim4.maxCost);
+            fprintf('    Custo médio: %.6f ± %.6f\n', output_sim4.meanCost, output_sim4.stdCost);
+        else
+            fprintf('    ⚠ Campos de custo não disponíveis\n');
+        end
+
+        if isfield(output_sim4, 'gamma') && isfield(output_sim4.gamma, 'meanGamma')
+            fprintf('    γ médio (LMI): %.6f\n', output_sim4.gamma.meanGamma);
+            fprintf('    γ máximo (LMI): %.6f\n', output_sim4.gamma.maxGamma);
+        else
+            fprintf('    ⚠ Campos de gamma não disponíveis\n');
+        end
+
+    catch ME
+        fprintf('  ✗ ERRO: %s\n', ME.message);
+        resultados_simulacao{4} = [];
+    end
+    fprintf('\n');
+
+    %% =================================================================
+    %% 5. RESULTADOS ESPECÍFICOS PARA RESPOSTA AO REVISOR
+    %% =================================================================
+
+    fprintf('==================================================================================\n');
+    fprintf('                    TABELA DE RESULTADOS PARA O REVISOR\n');
+    fprintf('    Monte Carlo analysis with %d random parameter combinations per controller\n', numSimulacoesMC);
+    fprintf('==================================================================================\n\n');
+
+    % Cabeçalho da tabela principal (expandido para Monte Carlo)
+    fprintf('%-25s | %-12s | %-12s | %-12s | %-12s | %-12s | %-12s\n', ...
+        'CONTROLADOR/MÉTODO', 'Custo Máx', 'Custo Médio', 'Custo Min', 'γ Máx (LMI)', 'γ Médio (LMI)', 'Taxa Sucesso');
+    fprintf('%s\n', repmat('-', 110, 1));
+
+    % Dados da tabela - incluindo estatísticas Monte Carlo
+    for ctrl = 1:4
+        if ~isempty(resultados_simulacao{ctrl})
+            sim_result = resultados_simulacao{ctrl};
+
+            % Verificar campos de custo
+            if isfield(sim_result, 'maxCost')
+                max_cost_str = sprintf('%10.6f', sim_result.maxCost);
+                mean_cost_str = sprintf('%10.6f', sim_result.meanCost);
+                if isfield(sim_result, 'minCost')
+                    min_cost_str = sprintf('%10.6f', sim_result.minCost);
+                else
+                    min_cost_str = sprintf('%10s', 'N/A');
+                end
+            else
+                max_cost_str = sprintf('%10s', 'N/A');
+                mean_cost_str = sprintf('%10s', 'N/A');
+                min_cost_str = sprintf('%10s', 'N/A');
+            end
+
+            % Verificar campos de gamma
+            if isfield(sim_result, 'gamma') && isfield(sim_result.gamma, 'maxGamma')
+                max_gamma_str = sprintf('%10.6f', sim_result.gamma.maxGamma);
+                mean_gamma_str = sprintf('%10.6f', sim_result.gamma.meanGamma);
+            else
+                max_gamma_str = sprintf('%10s', 'N/A');
+                mean_gamma_str = sprintf('%10s', 'N/A');
+            end
+
+            % Taxa de sucesso Monte Carlo
+            if isfield(sim_result, 'sim_success_rate')
+                success_rate_str = sprintf('%9.1f%%', sim_result.sim_success_rate * 100);
+            else
+                success_rate_str = sprintf('%10s', 'N/A');
+            end
+
+            fprintf('%-25s | %s | %s | %s | %s | %s | %s\n', ...
+                nomes_controladores{ctrl}, ...
+                max_cost_str, mean_cost_str, min_cost_str, max_gamma_str, mean_gamma_str, success_rate_str);
+        else
+            fprintf('%-25s | %10s | %10s | %10s | %10s | %10s | %10s\n', ...
+                nomes_controladores{ctrl}, 'FALHOU', 'FALHOU', 'FALHOU', 'FALHOU', 'FALHOU', '0.0%');
+        end
+    end
+
+    fprintf('\n');
+
+    % ANÁLISE 1: Comparação norm-bounded vs polytopic
+    fprintf('==================================================================================\n');
+    fprintf('                   ANÁLISE 1: NORM-BOUNDED vs POLYTOPIC\n');
+    fprintf('    Comparison between norm-bounded and polytopic uncertainty representations\n');
+    fprintf('==================================================================================\n\n');
+
+    if ~isempty(resultados_simulacao{2}) && ~isempty(resultados_simulacao{3})
+        % Comparar controladores 2 e 3 (Interval vs Polytopic)
+        sim_interval = resultados_simulacao{2};    % H∞ Robust Interval
+        sim_polytopic = resultados_simulacao{3};   % H∞ Robust Polytopic
+
+        fprintf('Comparação entre representações de incerteza:\n\n');
+
+        % Verificar quais métricas estão disponíveis
+        has_cost_interval = isfield(sim_interval, 'maxCost');
+        has_cost_polytopic = isfield(sim_polytopic, 'maxCost');
+        has_gamma_interval = isfield(sim_interval, 'gamma') && isfield(sim_interval.gamma, 'maxGamma');
+        has_gamma_polytopic = isfield(sim_polytopic, 'gamma') && isfield(sim_polytopic.gamma, 'maxGamma');
+
+        if has_gamma_interval && has_gamma_polytopic
+            fprintf('%-20s | %-15s | %-15s | %-12s\n', 'MÉTRICA', 'Interval (norm-bounded)', 'Polytopic', 'Melhor');
+            fprintf('%s\n', repmat('-', 70, 1));
+
+            % Comparação usando apenas γ (que parece estar disponível)
+            if has_gamma_interval && has_gamma_polytopic
+                % γ Máximo (LMI)
+                if sim_interval.gamma.maxGamma < sim_polytopic.gamma.maxGamma
+                    vantagem_gamma_max = 'Interval';
+                elseif sim_polytopic.gamma.maxGamma < sim_interval.gamma.maxGamma
+                    vantagem_gamma_max = 'Polytopic';
+                else
+                    vantagem_gamma_max = 'Equivalente';
+                end
+                fprintf('%-20s | %13.6f | %13.6f | %-12s\n', 'γ Máximo (LMI)', sim_interval.gamma.maxGamma, sim_polytopic.gamma.maxGamma, vantagem_gamma_max);
+
+                % γ Médio (LMI)
+                if sim_interval.gamma.meanGamma < sim_polytopic.gamma.meanGamma
+                    vantagem_gamma_mean = 'Interval';
+                elseif sim_polytopic.gamma.meanGamma < sim_interval.gamma.meanGamma
+                    vantagem_gamma_mean = 'Polytopic';
+                else
+                    vantagem_gamma_mean = 'Equivalente';
+                end
+                fprintf('%-20s | %13.6f | %13.6f | %-12s\n', 'γ Médio (LMI)', sim_interval.gamma.meanGamma, sim_polytopic.gamma.meanGamma, vantagem_gamma_mean);
+
+                % Resumo baseado em γ
+                if strcmp(vantagem_gamma_max, 'Interval') || strcmp(vantagem_gamma_mean, 'Interval')
+                    fprintf('\n📊 RESULTADO: Abordagem INTERVAL (norm-bounded) tem melhor desempenho\n');
+                elseif strcmp(vantagem_gamma_max, 'Polytopic') || strcmp(vantagem_gamma_mean, 'Polytopic')
+                    fprintf('\n📊 RESULTADO: Abordagem POLYTOPIC tem melhor desempenho\n');
+                else
+                    fprintf('\n📊 RESULTADO: Ambas abordagens têm desempenho equivalente\n');
+                end
+            end
+        else
+            fprintf('⚠ Dados de γ não disponíveis - comparação limitada\n');
+        end
+
+        % Tentar comparação com custos se disponíveis
+        if has_cost_interval && has_cost_polytopic
+            fprintf('\nComparação adicional usando custos de simulação:\n');
+            fprintf('  Interval - Custo máximo: %.6f, médio: %.6f\n', sim_interval.maxCost, sim_interval.meanCost);
+            fprintf('  Polytopic - Custo máximo: %.6f, médio: %.6f\n', sim_polytopic.maxCost, sim_polytopic.meanCost);
+        end
+
+    else
+        fprintf('⚠ Uma ou ambas as simulações falharam - comparação não disponível\n');
+    end
+
+    % ANÁLISE 2: Performance do controlador nominal em cenários incertos
+    fprintf('\n==================================================================================\n');
+    fprintf('           ANÁLISE 2: CONTROLADOR NOMINAL EM CENÁRIOS INCERTOS\n');
+    fprintf('    (Significance of uncertainty presence in sampled-time implementation)\n');
+    fprintf('==================================================================================\n\n');
+
+    if ~isempty(resultados_simulacao{1})
+        sim_nominal = resultados_simulacao{1};  % H∞ Nominal Sampled
+
+        fprintf('Análise da significância das incertezas no sistema amostrado:\n\n');
+
+        fprintf('CONTROLADOR NOMINAL aplicado ao sistema com incertezas politópicas:\n');
+        fprintf('  Custo máximo encontrado: %.6f\n', sim_nominal.maxCost);
+        fprintf('  Custo médio: %.6f ± %.6f\n', sim_nominal.meanCost, sim_nominal.stdCost);
+        fprintf('  γ máximo (LMI): %.6f\n', sim_nominal.gamma.maxGamma);
+        fprintf('  γ médio (LMI): %.6f\n', sim_nominal.gamma.meanGamma);
+        fprintf('  γ² teórico (nominal): %.6f\n', gamma_nominal_sampled^2);
+
+        % Calcular "violação" da garantia teórica
+        violacao_gamma = (sim_nominal.gamma.maxGamma^2 - gamma_nominal_sampled^2) / gamma_nominal_sampled^2 * 100;
+
+        fprintf('\n📊 IMPACTO DAS INCERTEZAS:\n');
+        if violacao_gamma > 0
+            fprintf('  ⚠ VIOLAÇÃO: γ² real excede teórico em %.1f%%\n', violacao_gamma);
+            fprintf('    Isso demonstra que o controlador nominal NÃO É ROBUSTO às incertezas!\n');
+        else
+            fprintf('  ✓ γ² real mantém-se dentro da garantia teórica\n');
+        end
+
+        fprintf('  📈 Variação de desempenho entre vértices: %.1f%% (desvio padrão relativo)\n', ...
+            (sim_nominal.stdCost / sim_nominal.meanCost) * 100);
+
+    else
+        fprintf('⚠ Simulação do controlador nominal falhou - análise não disponível\n');
+    end
+
+    % ANÁLISE 3: Implementação amostrada de controlador contínuo incerto
+    fprintf('\n==================================================================================\n');
+    fprintf('        ANÁLISE 3: IMPLEMENTAÇÃO AMOSTRADA DE CONTROLADOR CONTÍNUO\n');
+    fprintf('     (Sampled-time implementation of continuous H∞ controller)\n');
+    fprintf('==================================================================================\n\n');
+
+    if ~isempty(resultados_simulacao{4})
+        sim_continuous = resultados_simulacao{4};  % H∞ Continuous Sampled
+
+        fprintf('Performance da implementação amostrada do controlador contínuo incerto:\n\n');
+
+        fprintf('CONTROLADOR CONTÍNUO implementado com amostragem:\n');
+        fprintf('  Custo máximo: %.6f\n', sim_continuous.maxCost);
+        fprintf('  Custo médio: %.6f ± %.6f\n', sim_continuous.meanCost, sim_continuous.stdCost);
+        fprintf('  γ máximo (LMI): %.6f\n', sim_continuous.gamma.maxGamma);
+        fprintf('  γ médio (LMI): %.6f\n', sim_continuous.gamma.meanGamma);
+
+        % Comparação com métodos diretos amostrados
+        fprintf('\nComparação com síntese direta amostrada:\n');
+        fprintf('%-20s | %-15s | %-15s | %-15s\n', 'MÉTRICA', 'Contínuo→Amostrado', 'Interval Direto', 'Polytopic Direto');
+        fprintf('%s\n', repmat('-', 75, 1));
+
+        if ~isempty(resultados_simulacao{2}) && ~isempty(resultados_simulacao{3})
+            fprintf('%-20s | %13.6f | %13.6f | %13.6f\n', 'Custo Máximo', ...
+                sim_continuous.maxCost, resultados_simulacao{2}.maxCost, resultados_simulacao{3}.maxCost);
+            fprintf('%-20s | %13.6f | %13.6f | %13.6f\n', 'Custo Médio', ...
+                sim_continuous.meanCost, resultados_simulacao{2}.meanCost, resultados_simulacao{3}.meanCost);
+            fprintf('%-20s | %13.6f | %13.6f | %13.6f\n', 'γ Máximo (LMI)', ...
+                sim_continuous.gamma.maxGamma, resultados_simulacao{2}.gamma.maxGamma, resultados_simulacao{3}.gamma.maxGamma);
+
+            % Análise de qual método é melhor
+            custos_maximos = [sim_continuous.maxCost, resultados_simulacao{2}.maxCost, resultados_simulacao{3}.maxCost];
+            [~, melhor_idx] = min(custos_maximos);
+            metodos_comp = {'Contínuo→Amostrado', 'Interval Direto', 'Polytopic Direto'};
+
+            fprintf('\n🏆 MELHOR MÉTODO (custo máximo): %s (%.6f)\n', metodos_comp{melhor_idx}, custos_maximos(melhor_idx));
+        end
+
+    else
+        fprintf('⚠ Simulação do controlador contínuo falhou - análise não disponível\n');
+    end
+
+    % RESUMO FINAL PARA O REVISOR
+    fprintf('\n==================================================================================\n');
+    fprintf('                         RESUMO EXECUTIVO PARA O REVISOR\n');
+    fprintf('    Answers to specific reviewer questions using proper sampled-time analysis\n');
+    fprintf('==================================================================================\n\n');
+
+    fprintf('📋 RESPOSTAS DIRETAS ÀS QUESTÕES DO REVISOR:\n\n');
+
+    % QUESTÃO 1: Comparação norm-bounded vs polytopic
+    fprintf('1️⃣ COMPARISON between NORM-BOUNDED and POLYTOPIC representations:\n');
+    if ~isempty(resultados_simulacao{2}) && ~isempty(resultados_simulacao{3})
+        % Verificar se dados estão disponíveis
+        if isfield(resultados_simulacao{2}, 'maxCost') && isfield(resultados_simulacao{3}, 'maxCost') && ...
+           isfinite(resultados_simulacao{2}.maxCost) && isfinite(resultados_simulacao{3}.maxCost)
+
+            custo_interval = resultados_simulacao{2}.maxCost;
+            custo_polytopic = resultados_simulacao{3}.maxCost;
+            gamma_interval = resultados_simulacao{2}.gamma.maxGamma;
+            gamma_polytopic = resultados_simulacao{3}.gamma.maxGamma;
+            taxa_sucesso_interval = resultados_simulacao{2}.lmi_success_rate * 100;
+            taxa_sucesso_polytopic = resultados_simulacao{3}.lmi_success_rate * 100;
+
+            if custo_interval < custo_polytopic
+                fprintf('   ✓ NORM-BOUNDED (Interval) approach is BETTER\n');
+                fprintf('     - Max γ²: %.6f vs %.6f (Polytopic)\n', custo_interval, custo_polytopic);
+                fprintf('     - Advantage: %.1f%% lower worst-case bound\n', (custo_polytopic - custo_interval)/custo_polytopic*100);
+            elseif custo_polytopic < custo_interval
+                fprintf('   ✓ POLYTOPIC approach is BETTER\n');
+                fprintf('     - Max γ²: %.6f vs %.6f (Interval)\n', custo_polytopic, custo_interval);
+                fprintf('     - Advantage: %.1f%% lower worst-case bound\n', (custo_interval - custo_polytopic)/custo_interval*100);
+            else
+                fprintf('   ≈ Both approaches have EQUIVALENT performance\n');
+            end
+
+            fprintf('     - Interval: γ_max=%.4f, Success rate=%.1f%%\n', gamma_interval, taxa_sucesso_interval);
+            fprintf('     - Polytopic: γ_max=%.4f, Success rate=%.1f%%\n', gamma_polytopic, taxa_sucesso_polytopic);
+        else
+            fprintf('   ⚠ Cannot compare - cost data not available or invalid\n');
+        end
+    else
+        fprintf('   ⚠ Cannot compare - simulation failures occurred\n');
+    end
+
+    % QUESTÃO 2: Significância das incertezas
+    fprintf('\n2️⃣ SIGNIFICANCE of UNCERTAINTY presence:\n');
+    if ~isempty(resultados_simulacao{1})
+        sim_nominal = resultados_simulacao{1};
+        violacao_percentual = (sim_nominal.gamma.maxGamma^2 - gamma_nominal_sampled^2) / gamma_nominal_sampled^2 * 100;
+        variacao_custos = (sim_nominal.stdCost / sim_nominal.meanCost) * 100;
+
+        fprintf('   📊 Nominal controller applied to uncertain system:\n');
+        fprintf('     - Performance degradation: %.1f%% above theoretical guarantee\n', max(0, violacao_percentual));
+        fprintf('     - Cost variation across uncertainty set: %.1f%%\n', variacao_custos);
+        if violacao_percentual > 10
+            fprintf('   ⚠ CRITICAL: Nominal design is NOT ROBUST to uncertainties!\n');
+        else
+            fprintf('   ✓ Nominal design shows acceptable robustness\n');
+        end
+    else
+        fprintf('   ⚠ Cannot assess - nominal simulation failed\n');
+    end
+
+    % QUESTÃO 3: Implementação amostrada vs contínua
+    fprintf('\n3️⃣ SAMPLED-TIME implementation vs CONTINUOUS design:\n');
+    if ~isempty(resultados_simulacao{4}) && ~isempty(resultados_simulacao{2})
+        custo_continuous_sampled = resultados_simulacao{4}.maxCost;
+        custo_direct_sampled = resultados_simulacao{2}.maxCost;
+
+        fprintf('   🔄 Continuous controller + Sampled implementation: %.6f\n', custo_continuous_sampled);
+        fprintf('   🎯 Direct sampled-time synthesis: %.6f\n', custo_direct_sampled);
+
+        if custo_direct_sampled < custo_continuous_sampled
+            fprintf('   ✓ DIRECT sampled-time synthesis is SUPERIOR\n');
+            fprintf('     - Advantage: %.1f%% better performance\n', (custo_continuous_sampled - custo_direct_sampled)/custo_continuous_sampled*100);
+        else
+            fprintf('   ✓ Continuous→Sampled implementation is competitive\n');
+            fprintf('     - Advantage: %.1f%% better performance\n', (custo_direct_sampled - custo_continuous_sampled)/custo_direct_sampled*100);
+        end
+    else
+        fprintf('   ⚠ Cannot compare - simulation failures occurred\n');
+    end
+
+    % ESTATÍSTICAS MONTE CARLO
+    fprintf('\n📊 ESTATÍSTICAS MONTE CARLO DETALHADAS:\n');
+    fprintf('   Total de simulações por controlador: %d\n', numSimulacoesMC);
+    for ctrl = 1:4
+        if ~isempty(resultados_simulacao{ctrl}) && isfield(resultados_simulacao{ctrl}, 'numSimulacoes')
+            sim_result = resultados_simulacao{ctrl};
+            fprintf('   %s:\n', nomes_controladores{ctrl});
+            fprintf('     - Simulações executadas: %d\n', sim_result.numSimulacoes);
+            fprintf('     - Taxa sucesso LMI: %.1f%% (%d/%d)\n', ...
+                sim_result.lmi_success_rate*100, round(sim_result.lmi_success_rate*sim_result.numSimulacoes), sim_result.numSimulacoes);
+            fprintf('     - Taxa sucesso simulação: %.1f%% (%d/%d)\n', ...
+                sim_result.sim_success_rate*100, round(sim_result.sim_success_rate*sim_result.numSimulacoes), sim_result.numSimulacoes);
+
+            if isfield(sim_result, 'pior_caso')
+                fprintf('     - Pior caso: custo=%.6f (k2=%.3f, b=%.4f)\n', ...
+                    sim_result.pior_caso.custo, sim_result.pior_caso.k2, sim_result.pior_caso.b);
+            end
+            if isfield(sim_result, 'melhor_caso')
+                fprintf('     - Melhor caso: custo=%.6f (k2=%.3f, b=%.4f)\n', ...
+                    sim_result.melhor_caso.custo, sim_result.melhor_caso.k2, sim_result.melhor_caso.b);
+            end
+        end
+    end
+
+    % EFETIVIDADE DOS MÉTODOS PROPOSTOS
+    fprintf('\n🎯 EFFECTIVENESS of PROPOSED METHODS:\n');
+    num_sucessos = sum(~cellfun(@isempty, resultados_simulacao));
+    fprintf('   - Successful Monte Carlo campaigns: %d/4 controllers\n', num_sucessos);
+
+    if num_sucessos >= 2
+        % Encontrar melhor método robusto
+        custos_robustos = [];
+        nomes_robustos = {};
+        for i = 2:4
+            if ~isempty(resultados_simulacao{i})
+                custos_robustos(end+1) = resultados_simulacao{i}.maxCost;
+                nomes_robustos{end+1} = nomes_controladores{i};
+            end
+        end
+
+        if ~isempty(custos_robustos)
+            [melhor_custo, melhor_idx] = min(custos_robustos);
+            fprintf('   🏆 BEST ROBUST METHOD: %s\n', nomes_robustos{melhor_idx});
+            fprintf('     - Best worst-case cost: %.6f\n', melhor_custo);
+        end
+    end
+
+    % SALVAR RESULTADOS
+    fprintf('\n==================================================================================\n');
+    fprintf('                              SALVANDO RESULTADOS\n');
+    fprintf('==================================================================================\n\n');
+
+    % Estrutura de saída para o revisor
+    saida_revisor.resultados_simulacao = resultados_simulacao;
+    saida_revisor.nomes_controladores = nomes_controladores;
+    saida_revisor.controladores_gamma = controladores_gamma;
+    saida_revisor.controladores_K = controladores_K;
+    saida_revisor.sistemas_monte_carlo = sistemas_monte_carlo_fixos;  % Salvar sistemas para análise posterior
+    saida_revisor.parametros.h = h;
+    saida_revisor.parametros.delta = delta;
+    saida_revisor.parametros.tol = tol;
+    saida_revisor.parametros.numSimulacoesMC = numSimulacoesMC;
+    saida_revisor.parametros.seed_monte_carlo = seed_monte_carlo;
+    saida_revisor.sistema.m1 = m1;
+    saida_revisor.sistema.m2 = m2;
+    saida_revisor.sistema.k1 = k1;
+    saida_revisor.sistema.k2 = k2;
+    saida_revisor.sistema.b = b;
+    saida_revisor.incertezas = 'k2±2%, b±5%';
+    saida_revisor.metodo = 'Monte Carlo com sistemas fixos';
+    saida_revisor.timestamp = datestr(now);
+
+    try
+        save('resultados_resposta_revisor.mat', 'saida_revisor');
+        fprintf('✓ Resultados salvos em: resultados_resposta_revisor.mat\n');
+    catch ME
+        fprintf('✗ Erro ao salvar: %s\n', ME.message);
+    end
+
+    fprintf('✓ Gráficos individuais salvos para cada simulação\n');
+    fprintf('✓ Análise focada nas questões específicas do revisor\n\n');
+
+    fprintf('==================================================================================\n');
+    fprintf('                    RESPOSTA AO REVISOR FINALIZADA\n');
+    fprintf('                            %s\n', datestr(now));
+    fprintf('==================================================================================\n');
+
+end
